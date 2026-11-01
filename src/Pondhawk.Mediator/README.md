@@ -52,7 +52,7 @@ response.Match(
 
 `ErrorKindPolicy.IsTransient(this ErrorKind)` is the canonical retry-vs-dead-letter default
 (`System`, `Remote`, `Concurrency` are transient). The HTTP status mapping deliberately lives in
-the ASP.NET layer, not here — `Pondhawk.Core` stays transport-agnostic.
+the ASP.NET layer, not here — this package stays transport-agnostic.
 
 ### Pipeline Behaviors
 
