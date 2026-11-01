@@ -30,4 +30,4 @@ Do not reference `Pondhawk.Core` in the same project: the duplicate types cause 
 dotnet run --project build/Build.csproj -- --target=Test
 ```
 
-Extracted from [pondhawktech/tools](https://github.com/pondhawktech/tools).
+Extracted from [pondhawktech/tools](https://github.com/pondhawktech/pondhawk-utilities), now `pondhawk-utilities`. Design record: [docs/mediator-response-envelope.md](docs/mediator-response-envelope.md).
