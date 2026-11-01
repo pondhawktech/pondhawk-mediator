@@ -12,14 +12,14 @@ dotnet run --project build/Build.csproj -- --target=Test
 dotnet test pondhawk-mediator.slnx
 
 # Pack NuGet packages (writes to ./artifacts)
-dotnet run --project build/Build.csproj -- --target=Pack --build-number=<n>
+dotnet run --project build/Build.csproj -- --target=Pack --package-version=<version>
 ```
 
 ## Project Setup
 
 - `net10.0`, nullable enabled in `src`, central package management, `TreatWarningsAsErrors` and Meziantou analyzer in `src`.
-- Each project's `version.json` holds `major.minor`; the Cake `Pack` target appends the build number.
-- `build.yml` pushes dev packages to the `pondhawktech` GitHub Packages feed. `publish.yml` is a manual promotion to nuget.org with Trusted Publishing.
+- `src/Directory.Build.props` holds the last released version in `<VersionPrefix>`, shared by both packages. `publish.yml` bumps it, tags the release and commits the change.
+- `build.yml` pushes prerelease packages to the `pondhawktech` GitHub Packages feed. `publish.yml` is a manual release to nuget.org with Trusted Publishing. The first release uses bump `none` and publishes `1.0.0`.
 
 ## Architecture
 
