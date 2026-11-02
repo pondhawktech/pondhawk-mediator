@@ -35,8 +35,13 @@ public sealed record ErrorInfo
     public IReadOnlyList<EventDetail> Details { get; init; } = [];
 
     /// <summary>
+    /// Gets the correlation identifier for tracing this error across systems. Empty when none was set.
+    /// </summary>
+    public string CorrelationId { get; init; } = "";
+
+    /// <summary>
     /// Creates an <see cref="ErrorInfo"/> from an <see cref="ExternalException"/>, copying its
-    /// kind, error code, explanation, and details.
+    /// kind, error code, explanation, details, and correlation identifier.
     /// </summary>
     /// <param name="ex">The application-level exception to convert.</param>
     /// <returns>An error shape mirroring the exception.</returns>
@@ -50,15 +55,18 @@ public sealed record ErrorInfo
             ErrorCode = ex.ErrorCode,
             Explanation = ex.Explanation,
             Details = [.. ex.Details],
+            CorrelationId = ex.CorrelationId,
         };
     }
 
     /// <summary>
     /// Creates a <see cref="ErrorKind.System"/> <see cref="ErrorInfo"/> from an unexpected exception.
     /// Used for bugs/infrastructure faults that are not modeled as an <see cref="ExternalException"/>.
+    /// The explanation is fixed text: an edge can return it, and the exception message can hold
+    /// internal details. The caller logs the exception.
     /// </summary>
     /// <param name="ex">The unexpected exception.</param>
-    /// <returns>A system-kind error shape carrying the exception message.</returns>
+    /// <returns>A system-kind error shape with a generic explanation.</returns>
     public static ErrorInfo System(Exception ex)
     {
         Guard.IsNotNull(ex);
@@ -67,7 +75,7 @@ public sealed record ErrorInfo
         {
             Kind = ErrorKind.System,
             ErrorCode = "System",
-            Explanation = ex.Message,
+            Explanation = "An unexpected error occurred.",
         };
     }
 }

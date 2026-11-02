@@ -31,7 +31,7 @@ public class BatchCommandResultTests
     [Fact]
     public void Succeeded_SetsSuccessTrue()
     {
-        var result = BatchCommandResult.Succeeded(new OrderResponse { OrderId = 1 });
+        var result = BatchCommandResult.Succeeded("CreateOrder", new OrderResponse { OrderId = 1 });
 
         result.Success.ShouldBeTrue();
     }
@@ -41,31 +41,37 @@ public class BatchCommandResultTests
     {
         var response = new OrderResponse { OrderId = 42 };
 
-        var result = BatchCommandResult.Succeeded(response);
+        var result = BatchCommandResult.Succeeded("CreateOrder", response);
 
         result.Response.ShouldBeSameAs(response);
     }
 
     [Fact]
-    public void Succeeded_ExtractsCommandTypeFromTypeName()
+    public void Succeeded_SetsCommandType()
     {
-        var result = BatchCommandResult.Succeeded(new OrderResponse());
+        var result = BatchCommandResult.Succeeded("DeleteOrder", new Receipt());
 
-        result.CommandType.ShouldBe("Order");
+        result.CommandType.ShouldBe("DeleteOrder");
     }
 
     [Fact]
-    public void Succeeded_TypeNameWithoutResponse_KeepsFullName()
+    public void Succeeded_NullCommandType_Throws()
     {
-        var result = BatchCommandResult.Succeeded("plain string");
+        Should.Throw<ArgumentNullException>(
+            () => BatchCommandResult.Succeeded(null, new OrderResponse()));
+    }
 
-        result.CommandType.ShouldBe("String");
+    [Fact]
+    public void Succeeded_EmptyCommandType_Throws()
+    {
+        Should.Throw<ArgumentException>(
+            () => BatchCommandResult.Succeeded("", new OrderResponse()));
     }
 
     [Fact]
     public void Succeeded_WithEntityUid_SetsEntityUid()
     {
-        var result = BatchCommandResult.Succeeded(new OrderResponse(), "order-123");
+        var result = BatchCommandResult.Succeeded("CreateOrder", new OrderResponse(), "order-123");
 
         result.EntityUid.ShouldBe("order-123");
     }
@@ -73,7 +79,7 @@ public class BatchCommandResultTests
     [Fact]
     public void Succeeded_WithoutEntityUid_EntityUidIsNull()
     {
-        var result = BatchCommandResult.Succeeded(new OrderResponse());
+        var result = BatchCommandResult.Succeeded("CreateOrder", new OrderResponse());
 
         result.EntityUid.ShouldBeNull();
     }
@@ -81,7 +87,7 @@ public class BatchCommandResultTests
     [Fact]
     public void Succeeded_ErrorMessageIsNull()
     {
-        var result = BatchCommandResult.Succeeded(new OrderResponse());
+        var result = BatchCommandResult.Succeeded("CreateOrder", new OrderResponse());
 
         result.ErrorMessage.ShouldBeNull();
     }
@@ -181,7 +187,7 @@ public class BatchCommandResultTests
     public void GetResponse_CorrectType_ReturnsTypedResponse()
     {
         var response = new OrderResponse { OrderId = 42 };
-        var result = BatchCommandResult.Succeeded(response);
+        var result = BatchCommandResult.Succeeded("CreateOrder", response);
 
         var typed = result.GetResponse<OrderResponse>();
 
@@ -192,7 +198,7 @@ public class BatchCommandResultTests
     [Fact]
     public void GetResponse_WrongType_ReturnsNull()
     {
-        var result = BatchCommandResult.Succeeded(new OrderResponse());
+        var result = BatchCommandResult.Succeeded("CreateOrder", new OrderResponse());
 
         var typed = result.GetResponse<InvoiceResponse>();
 
@@ -216,7 +222,7 @@ public class BatchCommandResultTests
     {
         var results = new[]
         {
-            BatchCommandResult.Succeeded(new OrderResponse { OrderId = 1 }, "order-1"),
+            BatchCommandResult.Succeeded("CreateOrder", new OrderResponse { OrderId = 1 }, "order-1"),
             BatchCommandResult.Failed("CreateOrder", "order-2", Error("Gone", ErrorKind.NotFound)),
             BatchCommandResult.Failed("CreateOrder", "order-3", Error("State conflict", ErrorKind.Conflict)),
         };

@@ -64,6 +64,55 @@ public class ServiceCollectionExtensionsTests
         }
     }
 
+    public record DuplicatedRequest : IRequest<string>;
+
+    // Generic so that scans of this test assembly skip them. A test closes each one to get two
+    // different handlers for DuplicatedRequest.
+    public class FirstDuplicate<TMarker> : IRequestHandler<DuplicatedRequest, string>
+    {
+        public Task<string> HandleAsync(DuplicatedRequest request, CancellationToken cancellationToken = default)
+            => Task.FromResult("first");
+    }
+
+    public class SecondDuplicate<TMarker> : IRequestHandler<DuplicatedRequest, string>
+    {
+        public Task<string> HandleAsync(DuplicatedRequest request, CancellationToken cancellationToken = default)
+            => Task.FromResult("second");
+    }
+
+    public record OpenRequest<T> : IRequest<T>;
+
+    public class OpenHandler<T> : IRequestHandler<OpenRequest<T>, T>
+    {
+        public Task<T> HandleAsync(OpenRequest<T> request, CancellationToken cancellationToken = default)
+            => Task.FromResult(default(T));
+    }
+
+    public class ClosedBehavior : IPipelineBehavior<TestRequest, string>
+    {
+        public Task<string> HandleAsync(
+            TestRequest request,
+            RequestHandlerDelegate<string> next,
+            CancellationToken cancellationToken = default)
+            => next();
+    }
+
+    public abstract class AbstractBehavior<TRequest, TResponse> : TestBehavior<TRequest, TResponse>
+        where TRequest : IRequest<TResponse>;
+
+    public class SwappedBehavior<TResponse, TRequest> : TestBehavior<TRequest, TResponse>
+        where TRequest : IRequest<TResponse>;
+
+    public class NotABehavior<TRequest, TResponse>;
+
+    // An assembly that returns exactly the given types.
+    private sealed class FixedAssembly(params Type[] types) : Assembly
+    {
+        public override AssemblyName GetName() => new("FixedAssembly");
+
+        public override Type[] GetTypes() => types;
+    }
+
     // An assembly whose GetTypes() throws ReflectionTypeLoadException — the loadable types survive
     // (as a real type array with a null slot for the one that failed), mirroring a missing optional
     // dependency or a version mismatch at scan time.
@@ -246,7 +295,104 @@ public class ServiceCollectionExtensionsTests
             e.Level == LogLevel.Warning && e.Message.Contains("skipped", StringComparison.Ordinal));
     }
 
+    // ── One handler per request ──
+
+    [Fact]
+    public void AddMediator_TwoHandlersForOneRequest_ThrowsAndNamesBoth()
+    {
+        var assembly = new FixedAssembly(typeof(FirstDuplicate<int>), typeof(SecondDuplicate<int>));
+
+        var ex = Should.Throw<InvalidOperationException>(
+            () => new ServiceCollection().AddMediator(assembly));
+
+        ex.Message.ShouldContain("FirstDuplicate");
+        ex.Message.ShouldContain("SecondDuplicate");
+    }
+
+    [Fact]
+    public void AddMediator_DuplicateAcrossCalls_Throws()
+    {
+        var services = new ServiceCollection();
+        services.AddMediator(new FixedAssembly(typeof(FirstDuplicate<int>)));
+
+        Should.Throw<InvalidOperationException>(
+            () => services.AddMediator(new FixedAssembly(typeof(SecondDuplicate<int>))));
+    }
+
+    [Fact]
+    public void AddMediator_FactoryRegisteredFirst_ThrowsOnScannedHandler()
+    {
+        var services = new ServiceCollection();
+        services.AddScoped<IRequestHandler<DuplicatedRequest, string>>(_ => new FirstDuplicate<int>());
+
+        var ex = Should.Throw<InvalidOperationException>(
+            () => services.AddMediator(new FixedAssembly(typeof(SecondDuplicate<int>))));
+
+        ex.Message.ShouldContain("a factory or instance registration");
+    }
+
+    [Fact]
+    public void AddMediator_KeyedRegistrationOfSameService_DoesNotConflict()
+    {
+        var services = new ServiceCollection();
+        services.AddKeyedScoped<IRequestHandler<DuplicatedRequest, string>, FirstDuplicate<int>>("key");
+
+        Should.NotThrow(() => services.AddMediator(new FixedAssembly(typeof(SecondDuplicate<int>))));
+    }
+
+    [Fact]
+    public void AddMediator_SameAssemblyTwice_RegistersHandlerOnce()
+    {
+        var services = new ServiceCollection();
+        var assembly = new FixedAssembly(typeof(TestHandler));
+
+        services.AddMediator(assembly);
+        services.AddMediator(assembly);
+
+        services.Count(d => d.ServiceType == typeof(IRequestHandler<TestRequest, string>)).ShouldBe(1);
+    }
+
+    [Fact]
+    public void AddMediator_DirectRegistrationAfterScan_ReplacesHandler()
+    {
+        var services = new ServiceCollection();
+        services.AddMediator(new FixedAssembly(typeof(FirstDuplicate<int>)));
+        services.AddScoped<IRequestHandler<DuplicatedRequest, string>, SecondDuplicate<int>>();
+
+        var provider = services.BuildServiceProvider();
+
+        provider.GetRequiredService<IRequestHandler<DuplicatedRequest, string>>()
+            .ShouldBeOfType<SecondDuplicate<int>>();
+    }
+
+    // ── Open generic handlers ──
+
+    [Fact]
+    public void AddMediator_OpenGenericHandler_IsSkipped()
+    {
+        var services = new ServiceCollection();
+
+        services.AddMediator(new FixedAssembly(typeof(OpenHandler<>), typeof(TestHandler)));
+
+        services.ShouldNotContain(d => d.ImplementationType == typeof(OpenHandler<>));
+        Should.NotThrow(() => services.BuildServiceProvider());
+    }
+
     // ── AddPipelineBehavior ──
+
+    [Theory]
+    [InlineData(typeof(ClosedBehavior))]
+    [InlineData(typeof(AbstractBehavior<,>))]
+    [InlineData(typeof(SwappedBehavior<,>))]
+    [InlineData(typeof(NotABehavior<,>))]
+    [InlineData(typeof(TestBehavior<TestRequest, string>))]
+    public void AddPipelineBehavior_WrongShape_ThrowsAtTheCall(Type behaviorType)
+    {
+        var ex = Should.Throw<ArgumentException>(
+            () => new ServiceCollection().AddPipelineBehavior(behaviorType));
+
+        ex.ParamName.ShouldBe("behaviorType");
+    }
 
     [Fact]
     public void AddPipelineBehavior_RegistersOpenGenericBehavior()

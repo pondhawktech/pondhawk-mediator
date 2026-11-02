@@ -15,11 +15,15 @@ namespace Pondhawk.Mediator;
 public static partial class ServiceCollectionExtensions
 {
     /// <summary>
-    /// Registers the mediator and all handlers from the specified assemblies.
+    /// Registers the mediator and all handlers from the specified assemblies. Open generic types are
+    /// skipped. Registering the same handler type again has no effect.
     /// </summary>
     /// <param name="services">The service collection to register with.</param>
     /// <param name="assemblies">The assemblies to scan for handlers.</param>
     /// <returns>The same service collection, for chaining.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when a scanned handler serves a request that already has a different handler registered.
+    /// </exception>
     public static IServiceCollection AddMediator(
         this IServiceCollection services,
         params Assembly[] assemblies)
@@ -27,7 +31,8 @@ public static partial class ServiceCollectionExtensions
 
     /// <summary>
     /// Registers the mediator and all handlers from the specified assemblies, logging any types that
-    /// fail to load during discovery.
+    /// fail to load during discovery. Open generic types are skipped. Registering the same handler
+    /// type again has no effect.
     /// </summary>
     /// <param name="services">The service collection to register with.</param>
     /// <param name="loggerFactory">
@@ -37,6 +42,9 @@ public static partial class ServiceCollectionExtensions
     /// </param>
     /// <param name="assemblies">The assemblies to scan for handlers.</param>
     /// <returns>The same service collection, for chaining.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when a scanned handler serves a request that already has a different handler registered.
+    /// </exception>
     public static IServiceCollection AddMediator(
         this IServiceCollection services,
         ILoggerFactory? loggerFactory,
@@ -56,7 +64,7 @@ public static partial class ServiceCollectionExtensions
         foreach (var assembly in assemblies)
         {
             var handlerTypes = GetLoadableTypes(assembly, logger)
-                .Where(t => !t.IsAbstract && !t.IsInterface)
+                .Where(t => !t.IsAbstract && !t.IsInterface && !t.ContainsGenericParameters)
                 .Where(t => t.GetInterfaces().Any(i =>
                     i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IRequestHandler<,>)));
 
@@ -70,12 +78,36 @@ public static partial class ServiceCollectionExtensions
 
                 foreach (var handlerInterface in handlerInterfaces)
                 {
-                    services.AddScoped(handlerInterface, handlerType);
+                    RegisterHandler(services, handlerInterface, handlerType);
                 }
             }
         }
 
         return services;
+    }
+
+    /// <summary>
+    /// Registers one handler and enforces the one-handler-per-request rule. Without this check the
+    /// container silently resolves the last registration.
+    /// </summary>
+    private static void RegisterHandler(IServiceCollection services, Type handlerInterface, Type handlerType)
+    {
+        var existing = services.FirstOrDefault(d => !d.IsKeyedService && d.ServiceType == handlerInterface);
+
+        if (existing is null)
+        {
+            services.AddScoped(handlerInterface, handlerType);
+            return;
+        }
+
+        if (existing.ImplementationType == handlerType)
+            return;
+
+        var request = handlerInterface.GetGenericArguments()[0];
+        var registered = existing.ImplementationType?.FullName ?? "a factory or instance registration";
+
+        throw new InvalidOperationException(
+            $"Request {request.FullName} already has a handler: {registered}. Handler {handlerType.FullName} cannot also serve it. A request has exactly one handler.");
     }
 
     /// <summary>
@@ -108,6 +140,13 @@ public static partial class ServiceCollectionExtensions
     /// Registers an open generic pipeline behavior for all request types.
     /// Order matters: first registered = outermost (executes first).
     /// </summary>
+    /// <param name="services">The service collection to register with.</param>
+    /// <param name="behaviorType">
+    /// A concrete open generic type that implements <see cref="IPipelineBehavior{TRequest, TResponse}"/>
+    /// with its own type parameters, in order, such as <c>typeof(LoggingBehavior&lt;,&gt;)</c>.
+    /// </param>
+    /// <returns>The same service collection, for chaining.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="behaviorType"/> does not have that shape.</exception>
     public static IServiceCollection AddPipelineBehavior(
         this IServiceCollection services,
         Type behaviorType)
@@ -115,7 +154,29 @@ public static partial class ServiceCollectionExtensions
         Guard.IsNotNull(services);
         Guard.IsNotNull(behaviorType);
 
+        if (!IsOpenGenericBehavior(behaviorType))
+            throw new ArgumentException(
+                $"Type {behaviorType.FullName ?? behaviorType.Name} must be a concrete open generic type that implements IPipelineBehavior<TRequest, TResponse> with its own type parameters, in order.",
+                nameof(behaviorType));
+
         services.AddScoped(typeof(IPipelineBehavior<,>), behaviorType);
         return services;
+    }
+
+    /// <summary>
+    /// The container closes the behavior by position, so its type parameters must be exactly the
+    /// interface's arguments in the same order. Any other shape fails or binds wrongly later.
+    /// </summary>
+    private static bool IsOpenGenericBehavior(Type behaviorType)
+    {
+        if (!behaviorType.IsGenericTypeDefinition || behaviorType.IsAbstract)
+            return false;
+
+        var parameters = behaviorType.GetGenericArguments();
+
+        return behaviorType.GetInterfaces().Any(i =>
+            i.IsGenericType &&
+            i.GetGenericTypeDefinition() == typeof(IPipelineBehavior<,>) &&
+            i.GetGenericArguments().SequenceEqual(parameters));
     }
 }

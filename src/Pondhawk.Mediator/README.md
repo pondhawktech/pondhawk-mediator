@@ -38,9 +38,11 @@ else
 Handlers still **throw** on error — nothing about authoring changes. The mediator is the single
 seam that converts a throw into a `Response<T>`: a thrown `ExternalException` becomes a
 `Response.Failure` carrying a structured `ErrorInfo` (with the error `Kind`), while an unexpected
-exception is logged at `Error` and enveloped as `ErrorKind.System`. `OperationCanceledException`
-and configuration errors (no handler registered) still propagate. This lets non-HTTP callers —
-queue consumers and batch — branch on the outcome without catching:
+exception is logged at `Error` and enveloped as `ErrorKind.System` with a generic `Explanation`.
+`OperationCanceledException` propagates only when the caller's token is cancelled; any other
+cancellation, such as an `HttpClient` timeout, is enveloped as `System`. Configuration errors (no
+handler registered) still propagate. This lets non-HTTP callers — queue consumers and batch — branch
+on the outcome without catching:
 
 ```csharp
 var response = await mediator.SendAsync(command);
@@ -84,4 +86,15 @@ Track batch operations with `AsyncLocal`-based context:
 using var scope = BatchExecutionContext.BeginBatch("import-2024");
 // All mediator calls within this scope share the batch context
 ```
+
+### Upgrade from 1.x to 2.0
+
+- **Handlers:** `AddMediator` throws when two different handler types serve one request, including a concrete handler and a concrete class derived from it. Make the base class abstract, or replace the handler with a direct DI registration after `AddMediator`. A direct registration before `AddMediator` also conflicts.
+- **Open generic handlers:** the scan skips them. Register closed forms by hand.
+- **Behaviors:** `AddPipelineBehavior` throws `ArgumentException` at the call unless the type is a concrete open generic that implements `IPipelineBehavior<,>` with its own type parameters, in order.
+- **Requests:** a type that implements `IRequest<>` twice throws `InvalidOperationException` when sent.
+- **Cancellation:** catch `OperationCanceledException` only for the caller's own token. Other cancellations now arrive as `ErrorKind.System`, which is transient by default.
+- **`ErrorInfo.System`:** `Explanation` is fixed text. Read the real message from the log.
+- **`ExternalException(IExceptionInfo)`:** it now copies `ErrorCode` and leaves `InnerExplanation` empty.
+- **`BatchCommandResult.Succeeded`:** pass the command type first: `Succeeded(commandType, response, entityUid)`. Check calls with a `string` response and an entity UID: the old form `Succeeded(text, uid)` still compiles, with the wrong meaning.
 

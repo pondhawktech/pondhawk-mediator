@@ -358,8 +358,9 @@ public class MediatorTests
 
         result.Ok.ShouldBeFalse();
         result.Error!.Kind.ShouldBe(ErrorKind.System);
-        result.Error.Explanation.ShouldBe("kaboom");
+        result.Error.Explanation.ShouldBe("An unexpected error occurred.");
         logger.Entries.ShouldContain(e => e.Level == LogLevel.Error);
+        logger.LastException.ShouldBeOfType<InvalidOperationException>().Message.ShouldBe("kaboom");
     }
 
     [Fact]
@@ -393,6 +394,7 @@ public class MediatorTests
         result.Error!.Kind.ShouldBe(ErrorKind.Conflict);
         logger.Entries.ShouldContain(e => e.Level == LogLevel.Warning);
         logger.Entries.ShouldNotContain(e => e.Level == LogLevel.Error);
+        logger.LastException.ShouldBeNull();
     }
 
     [Fact]
@@ -410,6 +412,7 @@ public class MediatorTests
         result.Ok.ShouldBeFalse();
         result.Error!.Kind.ShouldBe(ErrorKind.Remote);
         logger.Entries.ShouldContain(e => e.Level == LogLevel.Error);
+        logger.LastException.ShouldBeOfType<RemoteFailureException>();
     }
 
     [Fact]
@@ -447,7 +450,7 @@ public class MediatorTests
 
         result.Ok.ShouldBeFalse();
         result.Error!.Kind.ShouldBe(ErrorKind.System);
-        result.Error.Explanation.ShouldBe("behavior boom");
+        result.Error.Explanation.ShouldBe("An unexpected error occurred.");
     }
 
     [Fact]
@@ -465,18 +468,50 @@ public class MediatorTests
     }
 
     [Fact]
-    public async Task SendAsync_OperationCanceled_Propagates()
+    public async Task SendAsync_OperationCanceled_CallerTokenCancelled_Propagates()
     {
         var mediator = BuildMediator(s =>
             s.AddScoped<IRequestHandler<CancelThing, string>, CancelThingHandler>());
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
 
         await Should.ThrowAsync<OperationCanceledException>(
-            () => mediator.SendAsync(new CancelThing()));
+            () => mediator.SendAsync(new CancelThing(), cts.Token));
+    }
+
+    [Fact]
+    public async Task SendAsync_OperationCanceled_CallerTokenLive_EnvelopesAsSystem()
+    {
+        // An HttpClient timeout throws this way: the caller did not cancel, so it is a failure.
+        var mediator = BuildMediator(s =>
+            s.AddScoped<IRequestHandler<CancelThing, string>, CancelThingHandler>());
+        using var cts = new CancellationTokenSource();
+
+        var result = await mediator.SendAsync(new CancelThing(), cts.Token);
+
+        result.Ok.ShouldBeFalse();
+        result.Error!.Kind.ShouldBe(ErrorKind.System);
+    }
+
+    public record TwoResponses : IRequest<int>, IRequest<string>;
+
+    [Fact]
+    public async Task SendAsync_RequestWithTwoResponseTypes_ThrowsClearError()
+    {
+        var mediator = BuildMediator(_ => { });
+
+        var ex = await Should.ThrowAsync<InvalidOperationException>(
+            () => mediator.SendAsync<string>(new TwoResponses()));
+
+        ex.Message.ShouldContain(nameof(TwoResponses));
+        ex.Message.ShouldContain("exactly one response type");
     }
 
     private sealed class ListLogger<T> : ILogger<T>
     {
         public List<(LogLevel Level, string Message)> Entries { get; } = [];
+
+        public Exception LastException { get; private set; }
 
         public IDisposable BeginScope<TState>(TState state) where TState : notnull => null;
 
@@ -490,6 +525,7 @@ public class MediatorTests
             Func<TState, Exception, string> formatter)
         {
             Entries.Add((logLevel, formatter(state, exception)));
+            LastException = exception;
         }
     }
 

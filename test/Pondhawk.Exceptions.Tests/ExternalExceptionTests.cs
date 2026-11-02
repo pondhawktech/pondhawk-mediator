@@ -76,7 +76,17 @@ public class ExternalExceptionTests
         var ex = new TestException(info);
 
         ex.Explanation.ShouldBe("Detailed error");
-        ex.InnerExplanation.ShouldBe("Detailed error");
+        ex.InnerExplanation.ShouldBe("");
+    }
+
+    [Fact]
+    public void Constructor_FromExceptionInfo_CopiesErrorCode()
+    {
+        var info = new TestExceptionInfo { ErrorCode = "Custom", Explanation = "Detailed error" };
+
+        var ex = new TestException(info);
+
+        ex.ErrorCode.ShouldBe("Custom");
     }
 
     [Fact]

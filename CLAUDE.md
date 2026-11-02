@@ -25,8 +25,8 @@ dotnet run --project build/Build.csproj -- --target=Pack --package-version=<vers
 
 `Pondhawk.Mediator` → `Pondhawk.Exceptions`. `Pondhawk.Exceptions` must never depend on the mediator: applications use it alone.
 
-- The mediator is request/response only, with exactly one handler per request. There is deliberately no notification or publish channel.
-- `Mediator.SendAsync` is the single seam that converts a thrown error to a `Response<T>` failure. `ExternalException` keeps its `ErrorKind`; unexpected exceptions become `ErrorKind.System`. `OperationCanceledException` and missing-handler errors still throw.
+- The mediator is request/response only, with exactly one handler per request. `AddMediator` throws when a scanned handler meets a different one for the same request, and skips open generic types. A direct DI registration after `AddMediator` still replaces a handler. There is deliberately no notification or publish channel.
+- `Mediator.SendAsync` is the single seam that converts a thrown error to a `Response<T>` failure. `ExternalException` keeps its `ErrorKind`; unexpected exceptions become `ErrorKind.System` with a generic `Explanation`, and the real message stays in the log. `OperationCanceledException` throws only when the caller's token is cancelled; any other cancellation, such as an `HttpClient` timeout, becomes `System`. Missing-handler errors still throw.
 - `default(Response<T>)` reads as a `System` failure, never a success with a null value.
 - There is deliberately no non-generic `Response`. A payload-less mutation returns `Response<Receipt>`.
 - The `ErrorKind` to HTTP status map deliberately stays out of this repo: it belongs in the ASP.NET layer.

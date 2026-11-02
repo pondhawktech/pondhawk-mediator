@@ -53,11 +53,15 @@ public partial class Mediator : IMediator
             requestType,
             static type =>
             {
-                var requestInterface = type.GetInterfaces()
-                    .FirstOrDefault(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IRequest<>))
-                    ?? throw new InvalidOperationException($"Type {type.Name} does not implement IRequest<TResponse>");
+                var requestInterfaces = type.GetInterfaces()
+                    .Where(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IRequest<>))
+                    .ToArray();
 
-                var responseType = requestInterface.GetGenericArguments()[0];
+                if (requestInterfaces.Length != 1)
+                    throw new InvalidOperationException(
+                        $"Type {type.Name} implements IRequest<TResponse> {requestInterfaces.Length} times. A request has exactly one response type.");
+
+                var responseType = requestInterfaces[0].GetGenericArguments()[0];
 
                 var wrapperType = typeof(RequestHandlerWrapper<,>).MakeGenericType(type, responseType);
                 return (RequestHandlerBase)Activator.CreateInstance(wrapperType)!;
@@ -72,9 +76,10 @@ public partial class Mediator : IMediator
             var value = await pipeline().ConfigureAwait(false);
             return Response<TResponse>.Success(value);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            // Never swallow cancellation.
+            // Never swallow the caller's cancellation. Any other cancellation, such as an
+            // HttpClient timeout, is a failure and falls through to the System envelope below.
             throw;
         }
         catch (ExternalException ex)
@@ -94,7 +99,8 @@ public partial class Mediator : IMediator
     /// <summary>
     /// Logs an expected, application-level failure at a level appropriate to its kind: the
     /// 4xx-family kinds are logged at Information/Warning (they are normal outcomes, not faults),
-    /// while the 5xx family is logged at Error.
+    /// while the 5xx family is logged at Error, with the exception so its stack trace and inner
+    /// exception are kept.
     /// </summary>
     private void LogByKind(ExternalException ex, string request)
     {
@@ -112,11 +118,13 @@ public partial class Mediator : IMediator
             _ => LogLevel.Error,
         };
 
-        LogDispatchFailure(level, request, ex.Kind, ex.ErrorCode, ex.Explanation);
+        var logged = level == LogLevel.Error ? ex : null;
+
+        LogDispatchFailure(level, logged, request, ex.Kind, ex.ErrorCode, ex.Explanation);
     }
 
     [LoggerMessage(Message = "Dispatch of {Request} failed with {Kind} ({ErrorCode}): {Explanation}")]
-    private partial void LogDispatchFailure(LogLevel level, string request, ErrorKind kind, string errorCode, string explanation);
+    private partial void LogDispatchFailure(LogLevel level, Exception? exception, string request, ErrorKind kind, string errorCode, string explanation);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Unhandled error dispatching {Request}")]
     private partial void LogUnhandled(Exception exception, string request);
