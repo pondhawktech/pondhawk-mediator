@@ -49,16 +49,19 @@ public record BatchCommandResult
     /// Creates a successful result from a command response.
     /// </summary>
     /// <typeparam name="T">The response type.</typeparam>
+    /// <param name="commandType">The type of command that succeeded.</param>
     /// <param name="response">The command response value.</param>
     /// <param name="entityUid">The UID of the affected entity, if any.</param>
     /// <returns>A successful batch result.</returns>
-    public static BatchCommandResult Succeeded<T>(T response, string? entityUid = null)
+    public static BatchCommandResult Succeeded<T>(string commandType, T response, string? entityUid = null)
     {
+        Guard.IsNotNullOrWhiteSpace(commandType);
+
         return new BatchCommandResult
         {
             Success = true,
             Response = response,
-            CommandType = typeof(T).Name.Replace("Response", "", StringComparison.Ordinal),
+            CommandType = commandType,
             EntityUid = entityUid
         };
     }

@@ -70,13 +70,24 @@ public class CommonExceptionsTests
     }
 
     [Fact]
-    public void ErrorInfo_System_UsesSystemKindAndMessage()
+    public void ErrorInfo_From_CopiesCorrelationId()
     {
-        var info = ErrorInfo.System(new InvalidOperationException("boom"));
+        var ex = new NotFoundException("Order", 7).WithCorrelationId("corr-1");
+
+        var info = ErrorInfo.From(ex);
+
+        info.CorrelationId.ShouldBe("corr-1");
+    }
+
+    [Fact]
+    public void ErrorInfo_System_UsesSystemKindAndGenericExplanation()
+    {
+        var info = ErrorInfo.System(new InvalidOperationException("secret connection detail"));
 
         info.Kind.ShouldBe(ErrorKind.System);
         info.ErrorCode.ShouldBe("System");
-        info.Explanation.ShouldBe("boom");
+        info.Explanation.ShouldBe("An unexpected error occurred.");
+        info.CorrelationId.ShouldBe("");
     }
 
 }

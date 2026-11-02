@@ -53,9 +53,8 @@ namespace Pondhawk.Exceptions
         {
 
             Kind = info.Kind;
-            ErrorCode = GetType().Name.Replace("Exception", "");
+            ErrorCode = info.ErrorCode;
             Explanation = info.Explanation;
-            InnerExplanation = info.Explanation;
 
             Details = new List<EventDetail>(info.Details);
 
