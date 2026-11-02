@@ -1,7 +1,9 @@
 name: Publish to NuGet.org
 
 # Run by hand. Bumps the version, builds, tests, and packs once, and pushes those packages.
-# The version file is committed only after the push, so a failed run leaves no false release.
+# The bump and tag land before the nuget.org push, so a published version always has both.
+# A failed push leaves a tag with no package: run again with a bump and that version is skipped.
+# If only one package reached nuget.org, unlist it by hand.
 #
 # A push to nuget.org is PERMANENT: a version can be unlisted but never replaced or deleted.
 #
@@ -104,27 +106,13 @@ jobs:
           name: nupkg-${{ steps.version.outputs.version }}
           path: artifacts/*.nupkg
 
+      # Before the bump and tag: a failed login must not use up a version.
       - name: NuGet login (OIDC to a temporary API key)
         if: '!inputs.dry_run'
         id: login
         uses: NuGet/login@v1
         with:
           user: kampilan
-
-      # No skip-duplicate here: on a permanent feed, a duplicate is an error.
-      - name: Publish to nuget.org
-        if: '!inputs.dry_run'
-        env:
-          NUGET_SOURCE: https://api.nuget.org/v3/index.json
-          NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
-        run: dotnet run --project build/Build.csproj -- --target=Push --exclusive --skip-duplicate=false
-
-      - name: Mirror to GitHub Packages
-        if: '!inputs.dry_run'
-        env:
-          NUGET_SOURCE: https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json
-          NUGET_API_KEY: ${{ secrets.GITHUB_TOKEN }}
-        run: dotnet run --project build/Build.csproj -- --target=Push --exclusive
 
       - name: Commit the version bump
         if: '!inputs.dry_run'
@@ -142,7 +130,39 @@ jobs:
           git commit -m "Release ${VERSION} [skip ci]"
           git push origin HEAD:main
 
-      - name: Tag and create the GitHub release
+      - name: Tag the release
+        if: '!inputs.dry_run'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          git tag "v${VERSION}"
+          git push origin "refs/tags/v${VERSION}"
+
+      # No skip-duplicate here: on a permanent feed, a duplicate is an error.
+      - name: Publish to nuget.org
+        if: '!inputs.dry_run'
+        env:
+          NUGET_SOURCE: https://api.nuget.org/v3/index.json
+          NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
+        run: dotnet run --project build/Build.csproj -- --target=Push --exclusive --skip-duplicate=false
+
+      # nuget.org is the release. A mirror failure must not stop the GitHub release.
+      - name: Mirror to GitHub Packages
+        if: '!inputs.dry_run'
+        id: mirror
+        continue-on-error: true
+        env:
+          NUGET_SOURCE: https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json
+          NUGET_API_KEY: ${{ secrets.GITHUB_TOKEN }}
+        run: dotnet run --project build/Build.csproj -- --target=Push --exclusive
+
+      - name: Warn about a failed mirror
+        if: ${{ !inputs.dry_run && steps.mirror.outcome == 'failure' }}
+        run: echo "::warning::The mirror to GitHub Packages failed. The nuget.org release is complete."
+
+      # Last, so a failed run never shows a release with no package.
+      - name: Create the GitHub release
         if: '!inputs.dry_run'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -150,7 +170,7 @@ jobs:
         run: |
           set -euo pipefail
           gh release create "v${VERSION}" \
-            --target "$(git rev-parse HEAD)" \
+            --verify-tag \
             --title "v${VERSION}" \
             --generate-notes \
             artifacts/*.nupkg

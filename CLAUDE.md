@@ -18,8 +18,8 @@ dotnet run --project build/Build.csproj -- --target=Pack --package-version=<vers
 ## Project Setup
 
 - `net10.0`, nullable enabled in `src`, central package management, `TreatWarningsAsErrors` and Meziantou analyzer in `src`.
-- `src/Directory.Build.props` holds the last released version in `<VersionPrefix>`, shared by both packages. `publish.yml` bumps it, tags the release and commits the change.
-- `build.yml` pushes prerelease packages to the `pondhawktech` GitHub Packages feed. `publish.yml` is a manual release to nuget.org with Trusted Publishing. The first release uses bump `none` and publishes `1.0.0`.
+- `src/Directory.Build.props` holds the last released version in `<VersionPrefix>`, shared by both packages. `publish.yml` commits the bump and tags before it pushes to nuget.org.
+- `build.yml` pushes prerelease packages to the `pondhawktech` GitHub Packages feed. `publish.yml` is a manual release to nuget.org with Trusted Publishing. A failed push leaves a tag with no package; the next run takes a new bump and skips that version.
 
 ## Architecture
 

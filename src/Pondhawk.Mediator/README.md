@@ -2,8 +2,6 @@
 
 Lightweight CQRS-style request/response mediator with pipeline behaviors and a `Response<T>` envelope. Error types come from [`Pondhawk.Exceptions`](https://www.nuget.org/packages/Pondhawk.Exceptions).
 
-CQRS-style request/response dispatch with pipeline behaviors for cross-cutting concerns.
-
 ```csharp
 using Pondhawk.Mediator;
 
@@ -19,9 +17,10 @@ public record CreateOrderCommand(string Customer, decimal Total) : ICommand<int>
 // Define a handler
 public class CreateOrderHandler : ICommandHandler<CreateOrderCommand, int>
 {
-    public async Task<int> Handle(CreateOrderCommand request, CancellationToken ct)
+    public Task<int> HandleAsync(CreateOrderCommand request, CancellationToken cancellationToken = default)
     {
         // ... create order, return ID
+        return Task.FromResult(42);
     }
 }
 
@@ -51,8 +50,10 @@ response.Match(
 ```
 
 `ErrorKindPolicy.IsTransient(this ErrorKind)` is the canonical retry-vs-dead-letter default
-(`System`, `Remote`, `Concurrency` are transient). The HTTP status mapping deliberately lives in
-the ASP.NET layer, not here — this package stays transport-agnostic.
+(`System`, `Remote`, `Concurrency` are transient). Set a retry limit in the consumer: an unexpected
+exception is also `System`, so a bug that fails every time is requeued like an infrastructure fault.
+The HTTP status mapping deliberately lives in the ASP.NET layer, not here — this package stays
+transport-agnostic.
 
 ### Pipeline Behaviors
 
@@ -62,7 +63,10 @@ Wrap handler execution for cross-cutting concerns:
 public class LoggingBehavior<TRequest, TResponse> : IPipelineBehavior<TRequest, TResponse>
     where TRequest : IRequest<TResponse>
 {
-    public async Task<TResponse> Handle(TRequest request, RequestHandlerDelegate<TResponse> next)
+    public async Task<TResponse> HandleAsync(
+        TRequest request,
+        RequestHandlerDelegate<TResponse> next,
+        CancellationToken cancellationToken = default)
     {
         Log.Information("Handling {Request}", typeof(TRequest).Name);
         var response = await next();
