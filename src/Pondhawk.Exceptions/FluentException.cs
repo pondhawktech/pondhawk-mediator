@@ -112,7 +112,7 @@ public abstract class FluentException<TDescendant> : ExternalException where TDe
     /// <summary>
     /// Populates this exception from an <see cref="IExceptionInfo"/> and returns this instance for fluent chaining.
     /// </summary>
-    /// <param name="info">The exception info to copy kind, error code, explanation, and details from.</param>
+    /// <param name="info">The exception info to copy kind, error code, explanation, details, and correlation identifier from.</param>
     /// <returns>This exception instance.</returns>
     public TDescendant With(IExceptionInfo info)
     {
@@ -123,6 +123,7 @@ public abstract class FluentException<TDescendant> : ExternalException where TDe
         WithErrorCode(info.ErrorCode);
         WithExplanation(info.Explanation);
         WithDetails(info.Details);
+        WithCorrelationId(info.CorrelationId);
 
 
         return (TDescendant)this;

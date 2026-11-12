@@ -186,8 +186,10 @@ for that case.
 Refactor so a failed batch command carries an `ErrorInfo` (with `ErrorKind`), not a bare string.
 Build batch results from `Response<T>`:
 
-- success `Response` → `BatchCommandResult.Succeeded(value, …)`
-- failure `Response` → `BatchCommandResult.Failed(commandType, entityUid, error: ErrorInfo)`
+- success `Response` → `BatchCommandResult.Success(commandType, value, …)`
+- failure `Response` → `BatchCommandResult.Failure(commandType, entityUid, error: ErrorInfo)`
+
+(2.0 renamed these from `Succeeded` and `Failed`, and the `Success` flag to `Ok`, to match `Response<T>`.)
 
 Keep a string `ErrorMessage` if convenient for back-compat, but derive it from
 `ErrorInfo.Explanation`; the authoritative field is the `ErrorInfo`/`Kind`. Verify

@@ -13,9 +13,9 @@ namespace Pondhawk.Mediator;
 public record BatchCommandResult
 {
     /// <summary>
-    /// Whether the command succeeded.
+    /// Whether the command succeeded. Named as <see cref="Response{T}.Ok"/> is.
     /// </summary>
-    public required bool Success { get; init; }
+    public required bool Ok { get; init; }
 
     /// <summary>
     /// The response object from the command (type-erased).
@@ -53,13 +53,13 @@ public record BatchCommandResult
     /// <param name="response">The command response value.</param>
     /// <param name="entityUid">The UID of the affected entity, if any.</param>
     /// <returns>A successful batch result.</returns>
-    public static BatchCommandResult Succeeded<T>(string commandType, T response, string? entityUid = null)
+    public static BatchCommandResult Success<T>(string commandType, T response, string? entityUid = null)
     {
         Guard.IsNotNullOrWhiteSpace(commandType);
 
         return new BatchCommandResult
         {
-            Success = true,
+            Ok = true,
             Response = response,
             CommandType = commandType,
             EntityUid = entityUid
@@ -73,14 +73,14 @@ public record BatchCommandResult
     /// <param name="entityUid">The UID of the affected entity, if any.</param>
     /// <param name="error">The structured error describing the failure.</param>
     /// <returns>A failed batch result.</returns>
-    public static BatchCommandResult Failed(string commandType, string? entityUid, ErrorInfo error)
+    public static BatchCommandResult Failure(string commandType, string? entityUid, ErrorInfo error)
     {
         Guard.IsNotNullOrWhiteSpace(commandType);
         Guard.IsNotNull(error);
 
         return new BatchCommandResult
         {
-            Success = false,
+            Ok = false,
             CommandType = commandType,
             EntityUid = entityUid,
             Error = error
