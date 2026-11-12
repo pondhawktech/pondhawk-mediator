@@ -95,6 +95,7 @@ using var scope = BatchExecutionContext.BeginBatch("import-2024");
 - **Requests:** a type that implements `IRequest<>` twice throws `InvalidOperationException` when sent.
 - **Cancellation:** catch `OperationCanceledException` only for the caller's own token. Other cancellations now arrive as `ErrorKind.System`, which is transient by default.
 - **`ErrorInfo.System`:** `Explanation` is fixed text. Read the real message from the log.
-- **`ExternalException(IExceptionInfo)`:** it now copies `ErrorCode` and leaves `InnerExplanation` empty.
-- **`BatchCommandResult.Succeeded`:** pass the command type first: `Succeeded(commandType, response, entityUid)`. Check calls with a `string` response and an entity UID: the old form `Succeeded(text, uid)` still compiles, with the wrong meaning.
+- **`ExternalException(IExceptionInfo)`:** it now copies `ErrorCode` and `CorrelationId`, and leaves `InnerExplanation` empty. `FluentException.With(info)` copies `CorrelationId` too.
+- **`IExceptionInfo`:** it has a `CorrelationId`. Implement it; return `""` for none.
+- **`BatchCommandResult`:** named as `Response<T>` is. `Succeeded(response, entityUid)` is now `Success(commandType, response, entityUid)`, `Failed(…)` is `Failure(…)`, and the `Success` property is `Ok`. The old names no longer build, so every call is found and given its command type.
 

@@ -4,7 +4,7 @@
 namespace Pondhawk.Exceptions;
 
 /// <summary>
-/// Provides structured error information (kind, code, explanation, details) for exception types.
+/// Provides structured error information (kind, code, explanation, details, correlation) for exception types.
 /// </summary>
 public interface IExceptionInfo
 {
@@ -28,5 +28,10 @@ public interface IExceptionInfo
     /// Gets the list of event details associated with this error.
     /// </summary>
     IList<EventDetail> Details { get; }
+
+    /// <summary>
+    /// Gets the correlation identifier for tracing this error across systems. Empty when none was set.
+    /// </summary>
+    string CorrelationId { get; }
 
 }

@@ -24,6 +24,7 @@ public class ExternalExceptionTests
         public string ErrorCode { get; set; } = "";
         public string Explanation { get; set; } = "";
         public IList<EventDetail> Details { get; set; } = new List<EventDetail>();
+        public string CorrelationId { get; set; } = "";
     }
 
     // ── Constructor with message ──
@@ -118,6 +119,15 @@ public class ExternalExceptionTests
         ex.Message.ShouldBe("the message");
     }
 
+    [Fact]
+    public void Constructor_FromExceptionInfo_KeepsCorrelationId()
+    {
+        var ex = new TestException(new TestExceptionInfo { Explanation = "x", CorrelationId = "trace-7" });
+
+        ex.CorrelationId.ShouldBe("trace-7");
+        ErrorInfo.From(ex).CorrelationId.ShouldBe("trace-7");
+    }
+
     // ── FluentException With(IExceptionInfo) ──
 
     [Fact]
@@ -139,6 +149,14 @@ public class ExternalExceptionTests
         ex.Kind.ShouldBe(ErrorKind.NotFound);
         ex.Explanation.ShouldBe("not found");
         ex.Details.Count.ShouldBe(1);
+    }
+
+    [Fact]
+    public void FluentException_With_KeepsCorrelationId()
+    {
+        var ex = new FunctionalException("initial").With(new TestExceptionInfo { Explanation = "x", CorrelationId = "trace-8" });
+
+        ex.CorrelationId.ShouldBe("trace-8");
     }
 
     [Fact]

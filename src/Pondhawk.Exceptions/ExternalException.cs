@@ -55,6 +55,7 @@ namespace Pondhawk.Exceptions
             Kind = info.Kind;
             ErrorCode = info.ErrorCode;
             Explanation = info.Explanation;
+            CorrelationId = info.CorrelationId;
 
             Details = new List<EventDetail>(info.Details);
 
